@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------
 # Node.js Layered Architecture Setup Script with JWT, NodeMailer, 
-# Docker and GitHub Actions CI/CD pipeline
+# Docker, GitHub Actions CI/CD pipeline, and Multiple Git Branches
 # ------------------------------------------------------------
 
 # Function to check if required commands are installed
@@ -21,7 +21,7 @@ check_command "npm"
 # ------------------------------------------------------------
 
 echo "Welcome to the Node.js Layered Architecture Setup!"
-echo "This script will guide you through setting up a Node.js project with JWT authentication, NodeMailer, Docker, and GitHub Actions."
+echo "This script will guide you through setting up a Node.js project with JWT authentication, NodeMailer, Docker, GitHub Actions, and multiple Git branches."
 
 # Get project details
 echo "Please enter your company name (for package details):"
@@ -58,11 +58,15 @@ BASE_DIR=$(pwd)
 SRC_DIR="$BASE_DIR/src"
 WORKFLOWS_DIR="$BASE_DIR/.github/workflows"
 DOCKER_DIR="$BASE_DIR/docker"
-CONFIG_DIR="$BASE_DIR/config"
-MIDDLEWARES_DIR="$BASE_DIR/src/middlewares"
+CONFIG_DIR="$BASE_DIR/src/config"
+CONTROLLERS_DIR="$BASE_DIR/src/controllers"
+MODELS_DIR="$BASE_DIR/src/models"
+SERVICES_DIR="$BASE_DIR/src/services"
+DTOS_DIR="$BASE_DIR/src/dtos"
 UTILS_DIR="$BASE_DIR/src/utils"
-TEST_DIR="$BASE_DIR/tests"
+MIDDLEWARES_DIR="$BASE_DIR/src/middlewares"
 GLOBAL_EXCEPTIONS_DIR="$BASE_DIR/src/globalExceptions"
+TESTS_DIR="$BASE_DIR/tests/user"
 
 # Create base directories
 echo "Creating the project folder structure..."
@@ -70,10 +74,14 @@ mkdir -p "$SRC_DIR"
 mkdir -p "$WORKFLOWS_DIR"
 mkdir -p "$DOCKER_DIR"
 mkdir -p "$CONFIG_DIR"
-mkdir -p "$MIDDLEWARES_DIR"
+mkdir -p "$CONTROLLERS_DIR"
+mkdir -p "$MODELS_DIR"
+mkdir -p "$SERVICES_DIR"
+mkdir -p "$DTOS_DIR"
 mkdir -p "$UTILS_DIR"
-mkdir -p "$TEST_DIR"
+mkdir -p "$MIDDLEWARES_DIR"
 mkdir -p "$GLOBAL_EXCEPTIONS_DIR"
+mkdir -p "$TESTS_DIR"
 
 # ------------------------------------------------------------
 # Step 3: Create Boilerplate Code for JWT Authentication, Email, Global Error Handling
@@ -81,8 +89,8 @@ mkdir -p "$GLOBAL_EXCEPTIONS_DIR"
 
 echo "Creating boilerplate code for JWT, email notifications, and global error handling..."
 
-# Controller
-cat <<EOF > "$SRC_DIR/controllers/userController.js"
+# Controllers
+cat <<EOF > "$CONTROLLERS_DIR/userController.js"
 const { registerUser, loginUser } = require('../services/userService');
 const { sendWelcomeEmail } = require('../utils/email');
 
@@ -106,8 +114,8 @@ exports.login = async (req, res, next) => {
 };
 EOF
 
-# Service (handling the business logic)
-cat <<EOF > "$SRC_DIR/services/userService.js"
+# Services (handling the business logic)
+cat <<EOF > "$SERVICES_DIR/userService.js"
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { getUserModel, createUser } = require('../models/userModel');
@@ -118,7 +126,7 @@ exports.registerUser = async (userData) => {
   const validatedData = validateRegistrationDTO(userData);
   const existingUser = await getUserModel({ email: validatedData.email });
   if (existingUser) throw new Error('User already exists');
-  
+
   const hashedPassword = await bcrypt.hash(validatedData.password, 10);
   const newUser = await createUser({ ...validatedData, password: hashedPassword });
   return newUser;
@@ -128,17 +136,17 @@ exports.loginUser = async (loginData) => {
   const validatedData = validateLoginDTO(loginData);
   const user = await getUserModel({ email: validatedData.email });
   if (!user) throw new Error('Invalid credentials');
-  
+
   const isMatch = await bcrypt.compare(validatedData.password, user.password);
   if (!isMatch) throw new Error('Invalid credentials');
-  
+
   const token = jwt.sign({ userId: user._id }, config.JWT_SECRET, { expiresIn: '1h' });
   return token;
 };
 EOF
 
-# Model (defines how user data is structured in database)
-cat <<EOF > "$SRC_DIR/models/userModel.js"
+# Models (defines how user data is structured in the database)
+cat <<EOF > "$MODELS_DIR/userModel.js"
 const users = []; // Placeholder for user storage (in-memory, replace with DB integration)
 exports.getUserModel = async (query) => {
   return users.find(user => user.email === query.email);
@@ -151,7 +159,7 @@ exports.createUser = async (userData) => {
 EOF
 
 # DTOs (Data Transfer Objects for validation)
-cat <<EOF > "$SRC_DIR/dtos/userDTO.js"
+cat <<EOF > "$DTOS_DIR/userDTO.js"
 const Joi = require('joi');
 
 exports.validateRegistrationDTO = (data) => {
@@ -172,7 +180,7 @@ exports.validateLoginDTO = (data) => {
 EOF
 
 # Authentication Middleware (JWT)
-cat <<EOF > "$SRC_DIR/middlewares/authMiddleware.js"
+cat <<EOF > "$MIDDLEWARES_DIR/authMiddleware.js"
 const jwt = require('jsonwebtoken');
 const config = require('../../config');
 
@@ -189,7 +197,7 @@ exports.authenticateJWT = (req, res, next) => {
 EOF
 
 # Global Error Handler
-cat <<EOF > "$SRC_DIR/globalExceptions/errorHandler.js"
+cat <<EOF > "$GLOBAL_EXCEPTIONS_DIR/errorHandler.js"
 module.exports = (err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ success: false, message: err.message });
@@ -197,7 +205,7 @@ module.exports = (err, req, res, next) => {
 EOF
 
 # Email Utility (using NodeMailer)
-cat <<EOF > "$SRC_DIR/utils/email.js"
+cat <<EOF > "$UTILS_DIR/email.js"
 const nodemailer = require('nodemailer');
 const config = require('../config');
 
@@ -237,7 +245,7 @@ COPY ./src/package*.json ./
 
 RUN npm install
 
-COPY ./src .
+COPY ./src ./
 
 EXPOSE $app_port
 
@@ -267,7 +275,7 @@ name: Node.js CI/CD
 on:
   push:
     branches:
-      - main
+      - dev  # Trigger workflow on push to dev branch
 
 jobs:
   build:
@@ -304,20 +312,26 @@ module.exports = {
 EOF
 
 # ------------------------------------------------------------
-# Step 6: Initialize Git Repository and Commit
+# Step 6: Initialize Git Repository, Create Branches, and Commit
 # ------------------------------------------------------------
 
 echo "Initializing Git repository..."
 
 git init
-git add .
+git checkout -b dev
 git commit -m "Initial commit with JWT authentication, NodeMailer, and global exception handling"
+git checkout -b working
+git checkout -b prod
+git checkout -b main
 
 # Set up the remote repository and push to GitHub
 git remote add origin "https://github.com/$github_username/$github_repo.git"
+git push -u origin dev
+git push -u origin working
+git push -u origin prod
 git push -u origin main
 
-echo "Git repository initialized and changes pushed to GitHub."
+echo "Git repository initialized, branches created, and pushed to GitHub."
 
 # ------------------------------------------------------------
 # Step 7: Final Instructions and Build Process
@@ -329,7 +343,7 @@ echo "Project setup complete!"
 echo "To build the Docker containers, run the following command:"
 echo "  docker-compose -f docker/docker-compose.yml up --build"
 
-echo "To run the GitHub Actions CI/CD pipeline, push your code to GitHub."
+echo "To run the GitHub Actions CI/CD pipeline, push your code to the dev branch."
 
 # Provide instructions for future development
 echo "You can now start developing your Node.js application!"
